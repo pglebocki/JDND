@@ -1,9 +1,18 @@
 package com.udacity.vehicles.service;
 
+import com.udacity.vehicles.client.maps.Address;
+import com.udacity.vehicles.client.prices.Price;
+import com.udacity.vehicles.domain.Location;
 import com.udacity.vehicles.domain.car.Car;
 import com.udacity.vehicles.domain.car.CarRepository;
-import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Implements the car service create, read, update or delete
@@ -14,17 +23,23 @@ import org.springframework.stereotype.Service;
 public class CarService {
 
     private final CarRepository repository;
+    private final WebClient mapsWebClient;
+    private final WebClient pricingWebClient;
 
-    public CarService(CarRepository repository) {
-        /**
-         * TODO: Add the Maps and Pricing Web Clients you create
-         *   in `VehiclesApiApplication` as arguments and set them here.
-         */
+    @Autowired
+    public CarService(
+            CarRepository repository,
+            @Qualifier("maps") WebClient mapsWebClient,
+            @Qualifier("pricing") WebClient pricingWebClient
+    ) {
         this.repository = repository;
+        this.mapsWebClient = mapsWebClient;
+        this.pricingWebClient = pricingWebClient;
     }
 
     /**
      * Gathers a list of all vehicles
+     *
      * @return a list of all vehicles in the CarRepository
      */
     public List<Car> list() {
@@ -33,41 +48,46 @@ public class CarService {
 
     /**
      * Gets car information by ID (or throws exception if non-existent)
+     *
      * @param id the ID number of the car to gather information on
      * @return the requested car's information, including location and price
      */
     public Car findById(Long id) {
-        /**
-         * TODO: Find the car by ID from the `repository` if it exists.
-         *   If it does not exist, throw a CarNotFoundException
-         *   Remove the below code as part of your implementation.
-         */
-        Car car = new Car();
+        final Car car = repository
+                .findById(id)
+                .orElseThrow(CarNotFoundException::new);
 
-        /**
-         * TODO: Use the Pricing Web client you create in `VehiclesApiApplication`
-         *   to get the price based on the `id` input'
-         * TODO: Set the price of the car
-         * Note: The car class file uses @transient, meaning you will need to call
-         *   the pricing service each time to get the price.
-         */
+        final Map<String, Object> priceParams = new HashMap<>();
+        priceParams.put("vehicleId", id);
+        final Price price = pricingWebClient.get()
+                .uri("/services/price", priceParams)
+                .retrieve()
+                .bodyToMono(Price.class)
+                .block();
+        car.setPrice(price.getPrice() + price.getCurrency());
 
+        final Location location = car.getLocation();
+        final Map<String, Object> mapsParams = new HashMap<>();
+        mapsParams.put("lat", location.getLat());
+        mapsParams.put("lon", location.getLon());
+        final Address address = mapsWebClient.get()
+                .uri("/", mapsParams)
+                .retrieve()
+                .bodyToMono(Address.class)
+                .block();
 
-        /**
-         * TODO: Use the Maps Web client you create in `VehiclesApiApplication`
-         *   to get the address for the vehicle. You should access the location
-         *   from the car object and feed it to the Maps service.
-         * TODO: Set the location of the vehicle, including the address information
-         * Note: The Location class file also uses @transient for the address,
-         * meaning the Maps service needs to be called each time for the address.
-         */
-
+        location.setCity(address.getCity());
+        location.setState(address.getState());
+        location.setZip(address.getZip());
+        location.setAddress(address.toString());
+        car.setLocation(location);
 
         return car;
     }
 
     /**
      * Either creates or updates a vehicle, based on prior existence of car
+     *
      * @param car A car object, which can be either new or existing
      * @return the new/updated car is stored in the repository
      */
@@ -86,19 +106,14 @@ public class CarService {
 
     /**
      * Deletes a given car by ID
+     *
      * @param id the ID number of the car to delete
      */
     public void delete(Long id) {
-        /**
-         * TODO: Find the car by ID from the `repository` if it exists.
-         *   If it does not exist, throw a CarNotFoundException
-         */
+        final Car car = repository
+                .findById(id)
+                .orElseThrow(CarNotFoundException::new);
 
-
-        /**
-         * TODO: Delete the car from the repository.
-         */
-
-
+        repository.delete(car);
     }
 }
