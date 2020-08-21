@@ -1,5 +1,6 @@
 package com.example.demo;
 
+import com.example.demo.controllers.OrderController;
 import com.example.demo.controllers.UserController;
 import com.example.demo.model.persistence.Cart;
 import com.example.demo.model.persistence.User;
@@ -41,6 +42,9 @@ public class SareetaApplicationTests {
 
     @Autowired
     private UserController userController;
+
+    @Autowired
+    OrderController orderController;
 
     @Autowired
     private JacksonTester<User> userTester;
@@ -157,5 +161,91 @@ public class SareetaApplicationTests {
 
         ResponseEntity<User> response = userController.createUser(request);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
+
+    @Test
+    public void testCreateOrderSuccess() throws Exception {
+        CreateUserRequest createUserReq = new CreateUserRequest();
+        createUserReq.setUsername("testuser");
+        createUserReq.setPassword("testpass");
+        createUserReq.setConfirmPassword("testpass");
+
+        ResponseEntity<User> response = userController.createUser(createUserReq);
+        assertEquals("testuser", response.getBody().getUsername());
+
+        User user = new User();
+        user.setUsername("testuser");
+        user.setPassword("testpass");
+
+        MvcResult loginResult = mvc.perform(post(new URI("/login"))
+                .content(userTester.write(user).getJson())
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Authorization"))
+                .andReturn();
+        String token = loginResult.getResponse().getHeader("Authorization");
+
+        ModifyCartRequest request = new ModifyCartRequest();
+        request.setUsername("testuser");
+        request.setItemId(1);
+        request.setQuantity(1);
+
+        mvc.perform(post(new URI("/api/cart/addToCart"))
+                .content(modifyCartRequestTester.write(request).getJson())
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk()).andReturn();
+
+        mvc.perform(post(new URI("/api/order/submit/testuser"))
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk()).andReturn();
+
+    }
+
+    @Test
+    public void testCreateOrderFailed() throws Exception {
+        CreateUserRequest createUserReq = new CreateUserRequest();
+        createUserReq.setUsername("testuser");
+        createUserReq.setPassword("testpass");
+        createUserReq.setConfirmPassword("testpass");
+
+        ResponseEntity<User> response = userController.createUser(createUserReq);
+        assertEquals("testuser", response.getBody().getUsername());
+
+        User user = new User();
+        user.setUsername("testuser");
+        user.setPassword("testpass");
+
+        MvcResult loginResult = mvc.perform(post(new URI("/login"))
+                .content(userTester.write(user).getJson())
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Authorization"))
+                .andReturn();
+        String token = loginResult.getResponse().getHeader("Authorization");
+
+        ModifyCartRequest request = new ModifyCartRequest();
+        request.setUsername("testuser");
+        request.setItemId(1);
+        request.setQuantity(1);
+
+        mvc.perform(post(new URI("/api/cart/addToCart"))
+                .content(modifyCartRequestTester.write(request).getJson())
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isOk()).andReturn();
+
+        mvc.perform(post(new URI("/api/order/submit/no_user"))
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .accept(MediaType.APPLICATION_JSON_UTF8))
+                .andExpect(status().isNotFound()).andReturn();
+
     }
 }
